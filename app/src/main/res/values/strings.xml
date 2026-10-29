@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Text Launcher</string>
+    <string name="lock_service_description">Lets Text Launcher turn the screen off when you double-tap an empty part of the home screen. It does not read or record anything on screen.</string>
+</resources>
