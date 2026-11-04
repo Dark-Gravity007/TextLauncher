@@ -52,8 +52,30 @@ object AppRepository {
         )
     }
 
-    fun uninstall(context: Context, packageName: String) {
-        startSafely(context, Intent(Intent.ACTION_DELETE, Uri.parse("package:$packageName")))
+    /** True for apps that came with the phone and have no user-installed update (these cannot be uninstalled). */
+    fun isSystemApp(context: Context, packageName: String): Boolean = try {
+        val flags = context.packageManager.getApplicationInfo(packageName, 0).flags
+        (flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0 &&
+            (flags and android.content.pm.ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) == 0
+    } catch (e: Exception) {
+        false
+    }
+
+    /**
+     * Shows the system uninstall prompt. Android 9+ only allows this for apps that declare REQUEST_DELETE_PACKAGES
+     * (the manifest does). System apps cannot be removed, so those open App info instead (where they can be disabled).
+     * Returns true if a prompt or page was opened.
+     */
+    fun uninstall(context: Context, packageName: String): Boolean {
+        if (isSystemApp(context, packageName)) {
+            openAppInfo(context, packageName)
+            return false
+        }
+        val uri = Uri.parse("package:$packageName")
+        if (startSafely(context, Intent(Intent.ACTION_UNINSTALL_PACKAGE, uri))) return true
+        if (startSafely(context, Intent(Intent.ACTION_DELETE, uri))) return true
+        openAppInfo(context, packageName)
+        return false
     }
 
     fun openUrl(context: Context, url: String) {

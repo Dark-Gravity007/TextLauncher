@@ -407,7 +407,12 @@ fun LauncherRoot(state: LauncherState) {
                     Toast.makeText(context, app.label + " hidden. Unhide it in Settings.", Toast.LENGTH_SHORT).show()
                 },
                 onAppInfo = { AppRepository.openAppInfo(context, app.packageName) },
-                onUninstall = { AppRepository.uninstall(context, app.packageName) },
+                onUninstall = {
+                    if (AppRepository.isSystemApp(context, app.packageName)) {
+                        Toast.makeText(context, "System apps can't be uninstalled. Opening App info.", Toast.LENGTH_LONG).show()
+                    }
+                    AppRepository.uninstall(context, app.packageName)
+                },
                 onDismiss = { menuApp = null },
             )
         }

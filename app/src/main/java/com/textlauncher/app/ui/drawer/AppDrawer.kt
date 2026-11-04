@@ -17,6 +17,8 @@ import androidx.compose.ui.layout.positionInRoot
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -502,25 +504,22 @@ private fun AlphabetIndex(
         modifier = modifier
             .onSizeChanged { heightPx = it.height.coerceAtLeast(1) }
             .onGloballyPositioned { topInRoot = it.positionInRoot().y }
+            // One handler for press, hold and slide. (Two separate detectors used to fight: the tap detector
+            // cancelled as soon as you started sliding and switched the wave off.)
             .pointerInput(letters) {
-                detectTapGestures(
-                    onPress = { offset ->
-                        begin(offset.y)
-                        tryAwaitRelease()
-                        finish()
-                    }
-                )
-            }
-            .pointerInput(letters) {
-                detectVerticalDragGestures(
-                    onDragStart = { offset -> begin(offset.y) },
-                    onDragEnd = { finish() },
-                    onDragCancel = { finish() },
-                    onVerticalDrag = { change, _ ->
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    down.consume()
+                    begin(down.position.y)
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) break
                         change.consume()
                         pick(change.position.y, false)
-                    },
-                )
+                    }
+                    finish()
+                }
             },
         verticalArrangement = Arrangement.Top,
         horizontalAlignment = Alignment.CenterHorizontally,

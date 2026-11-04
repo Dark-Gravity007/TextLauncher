@@ -11,6 +11,13 @@ import android.text.format.Formatter
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateContentSize
+import androidx.compose.runtime.key
+import androidx.compose.ui.graphics.Brush
+import com.textlauncher.app.data.CustomWidget
+import com.textlauncher.app.data.CustomWidgetStore
+import com.textlauncher.app.data.WidgetOrder
+import com.textlauncher.app.data.prefs.PreferencesManager
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
@@ -77,9 +84,48 @@ internal val AccentLow = Color(0xFFFF6961)
 internal val AccentGood = Color(0xFF5AD67D)
 private val stepGoals = listOf(4000, 6000, 8000, 10000, 12000)
 
+private val builtInIds = listOf(
+    "clock", "calendar", "cassette", "battery", "steps", "screentime", "health",
+    "storage", "data", "sun", "tracker", "hub", "quote", "notes",
+)
+
+private fun flagKey(id: String): String = when (id) {
+    "calendar" -> "wCalendar"
+    "cassette" -> "wCassette"
+    "screentime" -> "wScreenTime"
+    "health" -> "wHealth"
+    "data" -> "wData"
+    "sun" -> "wSun"
+    "tracker" -> "wTracker"
+    "hub" -> "wHub"
+    "quote" -> "wQuote"
+    else -> "w_$id"
+}
+
+private fun isEnabled(p: PreferencesManager, id: String): Boolean = when (id) {
+    "clock" -> p.widgetClock
+    "battery" -> p.widgetBattery
+    "steps" -> p.widgetSteps
+    "storage" -> p.widgetStorage
+    "notes" -> p.widgetNotes
+    else -> if (id.startsWith("cw:") || id.startsWith("aw:")) true else p.flag(flagKey(id), true)
+}
+
+private fun setEnabled(p: PreferencesManager, id: String, on: Boolean) {
+    when (id) {
+        "clock" -> p.updateWidgetClock(on)
+        "battery" -> p.updateWidgetBattery(on)
+        "steps" -> p.updateWidgetSteps(on)
+        "storage" -> p.updateWidgetStorage(on)
+        "notes" -> p.updateWidgetNotes(on)
+        else -> p.setFlag(flagKey(id), on)
+    }
+}
+
 /**
- * The secondary page: offline widgets on frosted-style cards. Everything here is read from the phone itself;
- * nothing touches the network.
+ * The secondary page: offline widgets on frosted-style cards, plus widgets from other apps.
+ * "Edit" turns on a small bar above every card for moving it, resizing it (compact or expanded) and hiding it.
+ * Nothing here touches the network.
  */
 @Composable
 fun WidgetPage(
@@ -88,12 +134,17 @@ fun WidgetPage(
     modifier: Modifier = Modifier,
 ) {
     val prefs = state.prefs
+    val controller = state.widgets
+    var editing by remember { mutableStateOf(false) }
+    var picking by remember { mutableStateOf(false) }
+
     val customJson = prefs.str("custom", "")
-    val custom = remember(customJson) { com.textlauncher.app.data.CustomWidgetStore.parse(customJson) }
-    val extrasOn = listOf("wCalendar", "wCassette", "wScreenTime", "wHealth", "wData", "wSun", "wTracker", "wHub", "wQuote")
-        .any { prefs.flag(it, true) }
-    val anyOn = extrasOn || custom.isNotEmpty() ||
-        prefs.widgetClock || prefs.widgetBattery || prefs.widgetSteps || prefs.widgetStorage || prefs.widgetNotes
+    val custom = remember(customJson) { CustomWidgetStore.parse(customJson) }
+    val hosted = controller?.hosted ?: emptyList()
+    val defaults = builtInIds + custom.map { "cw:" + it.id } + hosted.map { "aw:$it" }
+    val saved = prefs.str("order", "").split(",").filter { it.isNotEmpty() }
+    val order = WidgetOrder.merge(saved, defaults)
+    val visible = order.filter { isEnabled(prefs, it) }
 
     Box(
         modifier = modifier
@@ -108,31 +159,151 @@ fun WidgetPage(
                 .statusBarsPadding()
                 .navigationBarsPadding()
                 .imePadding()
-                .padding(horizontal = 20.dp, vertical = 24.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            if (prefs.widgetClock) ClockCard(state)
-            if (prefs.flag("wCalendar", true)) CalendarCard(state)
-            if (prefs.flag("wCassette", true)) CassetteCard(state)
-            if (prefs.widgetBattery) BatteryCard()
-            if (prefs.widgetSteps) StepsCard(state)
-            if (prefs.flag("wScreenTime", true)) ScreenTimeCard(state)
-            if (prefs.flag("wHealth", true)) HealthCard(state)
-            if (prefs.widgetStorage) StorageCard(state)
-            if (prefs.flag("wData", true)) DataCard(state)
-            if (prefs.flag("wSun", true)) SunCard(state)
-            if (prefs.flag("wTracker", true)) TrackerCard(state)
-            if (prefs.flag("wHub", true)) HubCard(state)
-            if (prefs.flag("wQuote", true)) QuoteCard(state)
-            for (w in custom) CustomWidgetCard(w, state)
-            if (prefs.widgetNotes) NotesCard(state)
-            if (!anyOn) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                if (editing && controller != null) {
+                    Text(
+                        text = "Add widget",
+                        style = Type.bodyStrong,
+                        color = Palette.Label,
+                        modifier = Modifier
+                            .pressable(onClick = { picking = true })
+                            .padding(vertical = 8.dp, horizontal = 4.dp),
+                    )
+                } else {
+                    Box(Modifier)
+                }
                 Text(
-                    text = "No widgets turned on.\nEnable them in Settings → WIDGET PAGE.",
+                    text = if (editing) "Done" else "Edit",
+                    style = Type.bodyStrong,
+                    color = if (editing) Palette.Label else Palette.Tertiary,
+                    modifier = Modifier
+                        .pressable(onClick = { editing = !editing })
+                        .padding(vertical = 8.dp, horizontal = 4.dp),
+                )
+            }
+
+            for (id in visible) {
+                key(id) {
+                    CardSlot(id, state, custom, editing, order, visible)
+                }
+            }
+
+            if (visible.isEmpty()) {
+                Text(
+                    text = "No widgets turned on.\nTap Edit, then Add widget, or enable cards in Settings → WIDGET PAGE.",
                     style = Type.body,
                     color = Palette.Tertiary,
                 )
             }
+        }
+
+        if (picking && controller != null) {
+            WidgetPicker(controller = controller, onDismiss = { picking = false })
+        }
+    }
+}
+
+@Composable
+private fun CardSlot(
+    id: String,
+    state: LauncherState,
+    custom: List<CustomWidget>,
+    editing: Boolean,
+    order: List<String>,
+    visible: List<String>,
+) {
+    val prefs = state.prefs
+    val controller = state.widgets
+    val hostedId: Int? = if (id.startsWith("aw:")) id.removePrefix("aw:").toIntOrNull() else null
+    val compact = prefs.flag("compact_$id", false)
+    val level = prefs.int("size_$id", 1)
+
+    Column {
+        if (editing) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                EditButton("↑") { prefs.setStr("order", WidgetOrder.move(order, visible, id, -1).joinToString(",")) }
+                EditButton("↓") { prefs.setStr("order", WidgetOrder.move(order, visible, id, 1).joinToString(",")) }
+                Box(Modifier.weight(1f))
+                if (hostedId != null) {
+                    EditButton("Size " + listOf("S", "M", "L")[level.coerceIn(0, 2)]) {
+                        prefs.setInt("size_$id", (level + 1) % 3)
+                    }
+                    EditButton("Remove") { controller?.remove(hostedId) }
+                } else {
+                    EditButton(if (compact) "Compact" else "Expanded") { prefs.setFlag("compact_$id", !compact) }
+                    if (!id.startsWith("cw:")) {
+                        EditButton("Hide") { setEnabled(prefs, id, false) }
+                    }
+                }
+            }
+        }
+
+        if (hostedId != null) {
+            if (controller != null) HostedWidgetCard(controller, hostedId, level)
+        } else {
+            val shape = RoundedCornerShape(26.dp)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize(animationSpec = spring(dampingRatio = 1f, stiffness = 380f))
+                    .then(if (compact) Modifier.heightIn(max = 128.dp).clip(shape) else Modifier)
+            ) {
+                CardBody(id, state, custom)
+                if (compact) {
+                    // A soft fade tells you there is more below.
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .height(36.dp)
+                            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.55f))))
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditButton(label: String, onClick: () -> Unit) {
+    Text(
+        text = label,
+        style = Type.caption,
+        color = Palette.Secondary,
+        modifier = Modifier
+            .pressable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 10.dp),
+    )
+}
+
+@Composable
+private fun CardBody(id: String, state: LauncherState, custom: List<CustomWidget>) {
+    when (id) {
+        "clock" -> ClockCard(state)
+        "calendar" -> CalendarCard(state)
+        "cassette" -> CassetteCard(state)
+        "battery" -> BatteryCard()
+        "steps" -> StepsCard(state)
+        "screentime" -> ScreenTimeCard(state)
+        "health" -> HealthCard(state)
+        "storage" -> StorageCard(state)
+        "data" -> DataCard(state)
+        "sun" -> SunCard(state)
+        "tracker" -> TrackerCard(state)
+        "hub" -> HubCard(state)
+        "quote" -> QuoteCard(state)
+        "notes" -> NotesCard(state)
+        else -> {
+            val widget = custom.firstOrNull { "cw:" + it.id == id }
+            if (widget != null) CustomWidgetCard(widget, state)
         }
     }
 }

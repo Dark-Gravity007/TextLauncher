@@ -14,6 +14,8 @@
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <!-- Sunrise widget: uses the last location the phone already knows. Asked for only when you tap Allow. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Android 9+ ignores uninstall requests from apps without this (the long-press "Uninstall"). -->
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <!-- Lets the swipe-down gesture open the notification shade. -->
     <uses-permission android:name="android.permission.EXPAND_STATUS_BAR" />
 

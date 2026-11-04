@@ -12,6 +12,7 @@ import com.textlauncher.app.data.prefs.PreferencesManager
 import com.textlauncher.app.data.repo.AppRepository
 import com.textlauncher.app.media.NowPlaying
 import com.textlauncher.app.system.Torch
+import com.textlauncher.app.widgets.WidgetController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -22,6 +23,9 @@ class LauncherState(private val context: Context) {
     val nowPlaying = NowPlaying(context)
     val torch = Torch(context)
     val steps = StepCounter(context)
+
+    /** Set by the activity; hosts widgets from other apps. */
+    var widgets: WidgetController? = null
 
     var apps by mutableStateOf<List<AppInfo>>(emptyList())
         private set

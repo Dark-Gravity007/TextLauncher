@@ -16,11 +16,13 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import com.textlauncher.app.ui.LauncherRoot
 import com.textlauncher.app.ui.theme.TextLauncherTheme
+import com.textlauncher.app.widgets.WidgetController
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
     private lateinit var state: LauncherState
+    private lateinit var widgetController: WidgetController
 
     private val packageReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -31,6 +33,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         state = LauncherState(applicationContext)
+        widgetController = WidgetController(this, state.prefs)
+        state.widgets = widgetController
 
         // Show the system wallpaper behind everything (also set in the theme; this is a belt-and-braces guard).
         window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
@@ -59,6 +63,23 @@ class MainActivity : ComponentActivity() {
             TextLauncherTheme {
                 LauncherRoot(state)
             }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        widgetController.start()
+    }
+
+    override fun onStop() {
+        widgetController.stop()
+        super.onStop()
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (!widgetController.onActivityResult(requestCode, resultCode, data)) {
+            super.onActivityResult(requestCode, resultCode, data)
         }
     }
 
