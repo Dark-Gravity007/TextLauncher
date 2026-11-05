@@ -666,7 +666,7 @@ internal fun CassetteCard(state: LauncherState, size: Int = 2) {
                     drawRoundRect(
                         Color.White.copy(alpha = 0.14f),
                         topLeft = Offset(14.dp.toPx(), 12.dp.toPx()),
-                        size = Size(size.width - 28.dp.toPx(), 56.dp.toPx()),
+                        size = Size(this.size.width - 28.dp.toPx(), 56.dp.toPx()),
                         cornerRadius = CornerRadius(8.dp.toPx(), 8.dp.toPx()),
                     )
                     // tape window with two reels
@@ -674,13 +674,13 @@ internal fun CassetteCard(state: LauncherState, size: Int = 2) {
                     val windowH = 58.dp.toPx()
                     drawRoundRect(
                         Color.Black.copy(alpha = 0.35f),
-                        topLeft = Offset(size.width * 0.18f, windowTop),
-                        size = Size(size.width * 0.64f, windowH),
+                        topLeft = Offset(this.size.width * 0.18f, windowTop),
+                        size = Size(this.size.width * 0.64f, windowH),
                         cornerRadius = CornerRadius(windowH / 2, windowH / 2),
                     )
                     val reelR = 21.dp.toPx()
                     val cy = windowTop + windowH / 2
-                    for (cx in listOf(size.width * 0.32f, size.width * 0.68f)) {
+                    for (cx in listOf(this.size.width * 0.32f, this.size.width * 0.68f)) {
                         val center = Offset(cx, cy)
                         drawCircle(Color.White.copy(alpha = 0.85f), radius = reelR, center = center, style = Stroke(2.dp.toPx()))
                         rotate(degrees = angle, pivot = center) {
