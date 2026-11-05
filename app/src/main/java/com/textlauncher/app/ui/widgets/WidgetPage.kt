@@ -85,8 +85,8 @@ internal val AccentGood = Color(0xFF5AD67D)
 private val stepGoals = listOf(4000, 6000, 8000, 10000, 12000)
 
 private val builtInIds = listOf(
-    "clock", "calendar", "cassette", "battery", "steps", "screentime", "health",
-    "storage", "data", "sun", "tracker", "hub", "quote", "notes",
+    "clock", "dashboard", "calendar", "cassette", "battery", "steps", "screentime", "health",
+    "storage", "data", "sun", "tracker", "hub", "quote", "calculator", "notes",
 )
 
 private fun flagKey(id: String): String = when (id) {
@@ -99,6 +99,8 @@ private fun flagKey(id: String): String = when (id) {
     "tracker" -> "wTracker"
     "hub" -> "wHub"
     "quote" -> "wQuote"
+    "dashboard" -> "wDashboard"
+    "calculator" -> "wCalc"
     else -> "w_$id"
 }
 
@@ -163,11 +165,11 @@ fun WidgetPage(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                if (editing && controller != null) {
+                if (controller != null) {
                     Text(
-                        text = "Add widget",
+                        text = "+ Widget",
                         style = Type.bodyStrong,
-                        color = Palette.Label,
+                        color = if (editing) Palette.Label else Palette.Tertiary,
                         modifier = Modifier
                             .pressable(onClick = { picking = true })
                             .padding(vertical = 8.dp, horizontal = 4.dp),
@@ -185,9 +187,36 @@ fun WidgetPage(
                 )
             }
 
-            for (id in visible) {
-                key(id) {
-                    CardSlot(id, state, custom, editing, order, visible)
+            // Sizes: 0 = 1×1 tile (two sit side by side), 1 = 2×2 strip, 2 = 4×2 full card.
+            val rows = ArrayList<List<String>>()
+            var i = 0
+            while (i < visible.size) {
+                val here = visible[i]
+                val nextId = visible.getOrNull(i + 1)
+                if (sizeOf(prefs, here) == 0 && nextId != null && sizeOf(prefs, nextId) == 0) {
+                    rows.add(listOf(here, nextId))
+                    i += 2
+                } else {
+                    rows.add(listOf(here))
+                    i += 1
+                }
+            }
+            for (row in rows) {
+                key(row.joinToString("|")) {
+                    if (row.size == 2) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                            for (id in row) {
+                                CardSlot(id, state, custom, editing, order, visible, Modifier.weight(1f))
+                            }
+                        }
+                    } else if (sizeOf(prefs, row[0]) == 0) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                            CardSlot(row[0], state, custom, editing, order, visible, Modifier.weight(1f))
+                            Box(Modifier.weight(1f))
+                        }
+                    } else {
+                        CardSlot(row[0], state, custom, editing, order, visible, Modifier.fillMaxWidth())
+                    }
                 }
             }
 
@@ -206,6 +235,11 @@ fun WidgetPage(
     }
 }
 
+private fun sizeOf(p: PreferencesManager, id: String): Int =
+    p.int("size_$id", if (id.startsWith("aw:")) 1 else 2).coerceIn(0, 2)
+
+private val sizeNames = listOf("1×1", "2×2", "4×2")
+
 @Composable
 private fun CardSlot(
     id: String,
@@ -214,14 +248,14 @@ private fun CardSlot(
     editing: Boolean,
     order: List<String>,
     visible: List<String>,
+    modifier: Modifier,
 ) {
     val prefs = state.prefs
     val controller = state.widgets
     val hostedId: Int? = if (id.startsWith("aw:")) id.removePrefix("aw:").toIntOrNull() else null
-    val compact = prefs.flag("compact_$id", false)
-    val level = prefs.int("size_$id", 1)
+    val size = sizeOf(prefs, id)
 
-    Column {
+    Column(modifier = modifier) {
         if (editing) {
             Row(
                 modifier = Modifier
@@ -232,41 +266,20 @@ private fun CardSlot(
                 EditButton("↑") { prefs.setStr("order", WidgetOrder.move(order, visible, id, -1).joinToString(",")) }
                 EditButton("↓") { prefs.setStr("order", WidgetOrder.move(order, visible, id, 1).joinToString(",")) }
                 Box(Modifier.weight(1f))
+                EditButton(sizeNames[size]) { prefs.setInt("size_$id", (size + 1) % 3) }
                 if (hostedId != null) {
-                    EditButton("Size " + listOf("S", "M", "L")[level.coerceIn(0, 2)]) {
-                        prefs.setInt("size_$id", (level + 1) % 3)
-                    }
-                    EditButton("Remove") { controller?.remove(hostedId) }
-                } else {
-                    EditButton(if (compact) "Compact" else "Expanded") { prefs.setFlag("compact_$id", !compact) }
-                    if (!id.startsWith("cw:")) {
-                        EditButton("Hide") { setEnabled(prefs, id, false) }
-                    }
+                    EditButton("✕") { controller?.remove(hostedId) }
+                } else if (!id.startsWith("cw:")) {
+                    EditButton("Hide") { setEnabled(prefs, id, false) }
                 }
             }
         }
 
-        if (hostedId != null) {
-            if (controller != null) HostedWidgetCard(controller, hostedId, level)
-        } else {
-            val shape = RoundedCornerShape(26.dp)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .animateContentSize(animationSpec = spring(dampingRatio = 1f, stiffness = 380f))
-                    .then(if (compact) Modifier.heightIn(max = 128.dp).clip(shape) else Modifier)
-            ) {
-                CardBody(id, state, custom)
-                if (compact) {
-                    // A soft fade tells you there is more below.
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .height(36.dp)
-                            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.55f))))
-                    )
-                }
+        Box(modifier = Modifier.animateContentSize(animationSpec = spring(dampingRatio = 1f, stiffness = 380f))) {
+            if (hostedId != null) {
+                if (controller != null) HostedWidgetCard(controller, hostedId, size, Modifier.fillMaxWidth())
+            } else {
+                CardBody(id, state, custom, size)
             }
         }
     }
@@ -280,30 +293,32 @@ private fun EditButton(label: String, onClick: () -> Unit) {
         color = Palette.Secondary,
         modifier = Modifier
             .pressable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 10.dp),
+            .padding(horizontal = 7.dp, vertical = 10.dp),
     )
 }
 
 @Composable
-private fun CardBody(id: String, state: LauncherState, custom: List<CustomWidget>) {
+private fun CardBody(id: String, state: LauncherState, custom: List<CustomWidget>, size: Int) {
     when (id) {
-        "clock" -> ClockCard(state)
-        "calendar" -> CalendarCard(state)
-        "cassette" -> CassetteCard(state)
-        "battery" -> BatteryCard()
-        "steps" -> StepsCard(state)
-        "screentime" -> ScreenTimeCard(state)
-        "health" -> HealthCard(state)
-        "storage" -> StorageCard(state)
-        "data" -> DataCard(state)
-        "sun" -> SunCard(state)
-        "tracker" -> TrackerCard(state)
-        "hub" -> HubCard(state)
-        "quote" -> QuoteCard(state)
-        "notes" -> NotesCard(state)
+        "clock" -> ClockCard(state, size)
+        "dashboard" -> DashboardCard(state, size)
+        "calendar" -> CalendarCard(state, size)
+        "cassette" -> CassetteCard(state, size)
+        "battery" -> BatteryCard(size)
+        "steps" -> StepsCard(state, size)
+        "screentime" -> ScreenTimeCard(state, size)
+        "health" -> HealthCard(state, size)
+        "storage" -> StorageCard(state, size)
+        "data" -> DataCard(state, size)
+        "sun" -> SunCard(state, size)
+        "tracker" -> TrackerCard(state, size)
+        "hub" -> HubCard(state, size)
+        "quote" -> QuoteCard(state, size)
+        "calculator" -> CalculatorCard(state, size)
+        "notes" -> NotesCard(state, size)
         else -> {
             val widget = custom.firstOrNull { "cw:" + it.id == id }
-            if (widget != null) CustomWidgetCard(widget, state)
+            if (widget != null) CustomWidgetCard(widget, state, size)
         }
     }
 }
@@ -330,7 +345,11 @@ internal fun CardLabel(text: String) {
 // ---------------------------------------------------------------- clock + complications
 
 @Composable
-private fun ClockCard(state: LauncherState) {
+private fun ClockCard(state: LauncherState, size: Int = 2) {
+    if (size < 2) {
+        ClockSummary(state, size)
+        return
+    }
     val context = LocalContext.current
     val now = rememberMinuteClock(state.resumeTick)
     val pattern = if (state.prefs.clock24) "HH:mm" else "h:mm"
@@ -385,7 +404,11 @@ private fun nextAlarmText(context: Context): String? {
 // ---------------------------------------------------------------- battery
 
 @Composable
-private fun BatteryCard() {
+private fun BatteryCard(size: Int = 2) {
+    if (size < 2) {
+        BatterySummary(size)
+        return
+    }
     val battery = rememberBattery()
     val low = battery.percent <= 15 && !battery.charging
     val color = when {
@@ -452,7 +475,11 @@ internal fun rememberBattery(): BatteryInfo {
 // ---------------------------------------------------------------- steps
 
 @Composable
-private fun StepsCard(state: LauncherState) {
+private fun StepsCard(state: LauncherState, size: Int = 2) {
+    if (size < 2) {
+        StepsSummary(state, size)
+        return
+    }
     val context = LocalContext.current
     val steps = state.steps
     val prefs = state.prefs
@@ -537,7 +564,11 @@ private fun StepsCard(state: LauncherState) {
 // ---------------------------------------------------------------- storage + memory
 
 @Composable
-private fun StorageCard(state: LauncherState) {
+private fun StorageCard(state: LauncherState, size: Int = 2) {
+    if (size < 2) {
+        StorageSummary(state, size)
+        return
+    }
     val context = LocalContext.current
     val storage = remember(state.resumeTick) { DeviceStats.storage() }
     val memory = remember(state.resumeTick) { DeviceStats.memory(context) }
@@ -594,52 +625,6 @@ internal fun ProgressBar(fraction: Float, color: Color) {
                 .fillMaxWidth(animated)
                 .clip(RoundedCornerShape(3.dp))
                 .background(color)
-        )
-    }
-}
-
-// ---------------------------------------------------------------- notes
-
-@Composable
-private fun NotesCard(state: LauncherState) {
-    val prefs = state.prefs
-    var text by remember { mutableStateOf(prefs.note) }
-
-    GlassCard {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            CardLabel("Notes")
-            if (text.isNotEmpty()) {
-                Text(
-                    text = "Clear",
-                    style = Type.caption,
-                    color = Palette.Secondary,
-                    modifier = Modifier.pressable(onClick = {
-                        text = ""
-                        prefs.updateNote("")
-                    }),
-                )
-            }
-        }
-        BasicTextField(
-            value = text,
-            onValueChange = {
-                text = it
-                prefs.updateNote(it)
-            },
-            textStyle = Type.body.copy(color = Palette.Label),
-            cursorBrush = SolidColor(Palette.Label),
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 120.dp)
-                .padding(top = 12.dp),
-            decorationBox = { inner ->
-                Box {
-                    if (text.isEmpty()) {
-                        Text("Write something…", style = Type.body, color = Palette.Tertiary)
-                    }
-                    inner()
-                }
-            },
         )
     }
 }

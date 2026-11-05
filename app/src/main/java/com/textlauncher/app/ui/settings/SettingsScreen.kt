@@ -170,7 +170,9 @@ fun SettingsScreen(
             item { ToggleRow("Steps", prefs.widgetSteps) { prefs.updateWidgetSteps(!prefs.widgetSteps) } }
             item { ToggleRow("Storage & memory", prefs.widgetStorage) { prefs.updateWidgetStorage(!prefs.widgetStorage) } }
             item { ToggleRow("Notes", prefs.widgetNotes) { prefs.updateWidgetNotes(!prefs.widgetNotes) } }
-            flagRow(prefs, "Next up (calendar)", "wCalendar")
+            flagRow(prefs, "Dashboard", "wDashboard")
+            flagRow(prefs, "Agenda (calendar)", "wCalendar")
+            flagRow(prefs, "Calculator", "wCalc")
             flagRow(prefs, "Cassette player", "wCassette")
             flagRow(prefs, "Screen time", "wScreenTime")
             flagRow(prefs, "System health", "wHealth")

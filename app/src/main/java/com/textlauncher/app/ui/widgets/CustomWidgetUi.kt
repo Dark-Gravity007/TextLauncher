@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -56,10 +57,16 @@ private const val MAX_ELEMENTS = 8
 // ---------------------------------------------------------------- the card a custom widget renders as
 
 @Composable
-internal fun CustomWidgetCard(widget: CustomWidget, state: LauncherState) {
-    GlassCard {
+internal fun CustomWidgetCard(widget: CustomWidget, state: LauncherState, size: Int = 2) {
+    // 1×1 shows the first block, 2×2 the first two, 4×2 everything.
+    val shown = when (size) {
+        0 -> widget.elements.take(1)
+        1 -> widget.elements.take(2)
+        else -> widget.elements
+    }
+    GlassCard(modifier = if (size == 0) Modifier.height(156.dp) else Modifier) {
         if (widget.title.isNotBlank()) CardLabel(widget.title)
-        for (element in widget.elements) {
+        for (element in shown) {
             ElementView(element, state)
         }
         if (widget.elements.isEmpty()) {

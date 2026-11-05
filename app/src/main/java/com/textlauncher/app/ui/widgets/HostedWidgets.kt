@@ -40,7 +40,7 @@ import com.textlauncher.app.widgets.WidgetController
 
 /** One widget from another app. [level]: 0 = compact, 1 = normal, 2 = tall. */
 @Composable
-internal fun HostedWidgetCard(controller: WidgetController, id: Int, level: Int) {
+internal fun HostedWidgetCard(controller: WidgetController, id: Int, level: Int, modifier: Modifier = Modifier) {
     val density = LocalDensity.current
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
     val info = remember(id) { controller.info(id) } ?: return
@@ -48,7 +48,7 @@ internal fun HostedWidgetCard(controller: WidgetController, id: Int, level: Int)
     // The widget's own preferred height, turned into dp, then scaled by the chosen size.
     val naturalDp = remember(info) { (info.minHeight / density.density).coerceIn(80f, 360f) }
     val targetDp = when (level) {
-        0 -> minOf(naturalDp, 110f)
+        0 -> minOf(naturalDp, 156f)
         2 -> minOf(naturalDp * 1.8f, 520f)
         else -> naturalDp
     }
@@ -57,7 +57,8 @@ internal fun HostedWidgetCard(controller: WidgetController, id: Int, level: Int)
         animationSpec = spring(dampingRatio = 1f, stiffness = 380f),
         label = "widgetHeight",
     )
-    val widthDp = screenWidthDp - 40
+    // 1×1 is half the page width, so two can sit side by side; the other sizes use the full width.
+    val widthDp = if (level == 0) (screenWidthDp - 40 - 14) / 2 else screenWidthDp - 40
 
     AndroidView(
         factory = { context -> controller.createView(id) ?: View(context) },
@@ -67,8 +68,7 @@ internal fun HostedWidgetCard(controller: WidgetController, id: Int, level: Int)
                 view.updateAppWidgetSize(null, widthDp, targetDp.toInt(), widthDp, targetDp.toInt())
             }
         },
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = modifier
             .height(animatedHeight)
             .clip(RoundedCornerShape(26.dp)),
     )

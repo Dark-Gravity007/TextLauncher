@@ -93,12 +93,16 @@ internal fun runQuickLink(context: Context, state: LauncherState, link: QuickLin
     }
 }
 
-private fun timeText(ms: Long): String = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(ms))
+internal fun timeText(ms: Long): String = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(ms))
 
 // ---------------------------------------------------------------- screen time
 
 @Composable
-internal fun ScreenTimeCard(state: LauncherState) {
+internal fun ScreenTimeCard(state: LauncherState, size: Int = 2) {
+    if (size < 2) {
+        ScreenTimeSummary(state, size)
+        return
+    }
     val context = LocalContext.current
     val now = rememberMinuteClock(state.resumeTick)
     var granted by remember { mutableStateOf(true) }
@@ -165,7 +169,11 @@ internal fun ScreenTimeCard(state: LauncherState) {
 // ---------------------------------------------------------------- system health
 
 @Composable
-internal fun HealthCard(state: LauncherState) {
+internal fun HealthCard(state: LauncherState, size: Int = 2) {
+    if (size < 2) {
+        HealthSummary(state, size)
+        return
+    }
     val context = LocalContext.current
     val battery = rememberBattery()
     val memory = remember(state.resumeTick) { DeviceStats.memory(context) }
@@ -196,7 +204,7 @@ internal fun HealthCard(state: LauncherState) {
 }
 
 @Composable
-private fun HealthTile(label: String, value: String, modifier: Modifier = Modifier, sub: String? = null) {
+internal fun HealthTile(label: String, value: String, modifier: Modifier = Modifier, sub: String? = null) {
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
@@ -209,101 +217,16 @@ private fun HealthTile(label: String, value: String, modifier: Modifier = Modifi
     }
 }
 
-// ---------------------------------------------------------------- calendar: next up + short agenda
-
-@Composable
-internal fun CalendarCard(state: LauncherState) {
-    val context = LocalContext.current
-    val now = rememberMinuteClock(state.resumeTick)
-    var granted by remember { mutableStateOf(CalendarRepo.hasPermission(context)) }
-    var events by remember { mutableStateOf<List<CalEvent>>(emptyList()) }
-
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
-        granted = ok
-        if (!ok) {
-            Toast.makeText(context, "Allow Calendar in App info to see events", Toast.LENGTH_LONG).show()
-            AppRepository.openAppInfo(context, context.packageName)
-        }
-    }
-
-    LaunchedEffect(now, granted, state.resumeTick) {
-        granted = CalendarRepo.hasPermission(context)
-        events = if (granted) {
-            withContext(Dispatchers.Default) { CalendarRepo.upcoming(context, System.currentTimeMillis(), 4) }
-        } else {
-            emptyList()
-        }
-    }
-
-    GlassCard {
-        CardLabel("Next up")
-        if (!granted) {
-            Text(
-                text = "Show your next event with a countdown. Read from the calendar on this phone only.",
-                style = Type.body,
-                color = Palette.Secondary,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            Text(
-                text = "Allow calendar access",
-                style = Type.bodyStrong,
-                color = Palette.Label,
-                modifier = Modifier
-                    .pressable(onClick = { launcher.launch(Manifest.permission.READ_CALENDAR) })
-                    .padding(top = 10.dp, bottom = 4.dp),
-            )
-        } else {
-            val next = events.firstOrNull { !it.allDay } ?: events.firstOrNull()
-            if (next == null) {
-                Text(
-                    text = "Nothing coming up.",
-                    style = Type.body,
-                    color = Palette.Secondary,
-                    modifier = Modifier.padding(top = 12.dp),
-                )
-            } else {
-                Text(
-                    text = CalendarRepo.countdown(next.begin, next.end, now),
-                    style = Type.answer,
-                    color = Palette.Label,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-                Text(
-                    text = next.title,
-                    style = Type.bodyStrong,
-                    color = Palette.Label,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                val rest = events.filter { it !== next }.take(3)
-                for (e in rest) {
-                    Row(modifier = Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(
-                            text = if (e.allDay) "All day" else timeText(e.begin),
-                            style = Type.caption,
-                            color = Palette.Tertiary,
-                            modifier = Modifier.width(52.dp),
-                        )
-                        Text(
-                            text = e.title,
-                            style = Type.caption,
-                            color = Palette.Secondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
 // ---------------------------------------------------------------- data + Wi-Fi meter
 
 private val dataLimits = listOf(1, 2, 5, 10, 20, 50)
 
 @Composable
-internal fun DataCard(state: LauncherState) {
+internal fun DataCard(state: LauncherState, size: Int = 2) {
+    if (size < 2) {
+        DataSummary(state, size)
+        return
+    }
     val context = LocalContext.current
     val prefs = state.prefs
     val now = rememberMinuteClock(state.resumeTick)
@@ -420,7 +343,11 @@ private fun UsageBar(label: String, used: Long, budget: Long, context: Context, 
 // ---------------------------------------------------------------- launcher hub
 
 @Composable
-internal fun HubCard(state: LauncherState) {
+internal fun HubCard(state: LauncherState, size: Int = 2) {
+    if (size < 2) {
+        HubCompact(state, size)
+        return
+    }
     val context = LocalContext.current
     GlassCard {
         CardLabel("Hub")
@@ -457,74 +384,8 @@ internal fun LinkTile(link: QuickLink, modifier: Modifier = Modifier, onClick: (
     }
 }
 
-// ---------------------------------------------------------------- water + habits
-
-private val habitNames = listOf("Read", "Move", "Focus")
-private const val WATER_GOAL = 8
-
 @Composable
-internal fun TrackerCard(state: LauncherState) {
-    val prefs = state.prefs
-    val today = HabitLogic.today()
-    val water = if (prefs.int("waterDay", 0) == today) prefs.int("waterCount", 0) else 0
-
-    GlassCard {
-        CardLabel("Water")
-        Row(
-            modifier = Modifier.padding(top = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            for (i in 0 until WATER_GOAL) {
-                Dot(filled = i < water, size = 28) {
-                    val next = if (water >= i + 1) i else i + 1
-                    prefs.setInt("waterDay", today)
-                    prefs.setInt("waterCount", next)
-                }
-            }
-        }
-        Text(
-            text = "$water of $WATER_GOAL glasses",
-            style = Type.caption,
-            color = Palette.Secondary,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-
-        Box(Modifier.height(18.dp))
-        CardLabel("Habits")
-        for ((i, name) in habitNames.withIndex()) {
-            val habit = HabitLogic.State(prefs.int("h${i}Last", 0), prefs.int("h${i}Streak", 0))
-            val done = HabitLogic.doneToday(habit, today)
-            val streak = HabitLogic.visibleStreak(habit, today)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Dot(filled = done, size = 28) {
-                    val next = HabitLogic.toggle(habit, today)
-                    prefs.setInt("h${i}Last", next.lastDone)
-                    prefs.setInt("h${i}Streak", next.streak)
-                }
-                Text(
-                    text = name,
-                    style = Type.body,
-                    color = Palette.Label,
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(start = 14.dp),
-                )
-                if (streak > 0) {
-                    Text(text = "$streak day" + (if (streak == 1) "" else "s"), style = Type.caption, color = Palette.Secondary)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun Dot(filled: Boolean, size: Int, onClick: () -> Unit) {
+internal fun Dot(filled: Boolean, size: Int, onClick: () -> Unit) {
     val fill by animateColorAsState(
         targetValue = if (filled) Palette.Label else Color.Transparent,
         animationSpec = tween(durationMillis = 160),
@@ -543,7 +404,11 @@ private fun Dot(filled: Boolean, size: Int, onClick: () -> Unit) {
 // ---------------------------------------------------------------- sunrise / golden hour
 
 @Composable
-internal fun SunCard(state: LauncherState) {
+internal fun SunCard(state: LauncherState, size: Int = 2) {
+    if (size < 2) {
+        SunSummary(state, size)
+        return
+    }
     val context = LocalContext.current
     val prefs = state.prefs
     val now = rememberMinuteClock(state.resumeTick)
@@ -663,7 +528,7 @@ private fun SunArc(fraction: Float?, modifier: Modifier = Modifier) {
 
 // ---------------------------------------------------------------- quote card
 
-private val builtInQuotes = listOf(
+internal val builtInQuotes = listOf(
     "One thing at a time.",
     "Be where your feet are.",
     "Make it simple, then make it better.",
@@ -677,7 +542,11 @@ private val builtInQuotes = listOf(
 )
 
 @Composable
-internal fun QuoteCard(state: LauncherState) {
+internal fun QuoteCard(state: LauncherState, size: Int = 2) {
+    if (size < 2) {
+        QuoteSummary(state, size)
+        return
+    }
     val context = LocalContext.current
     val prefs = state.prefs
     val now = rememberMinuteClock(state.resumeTick)
@@ -737,7 +606,11 @@ internal fun QuoteCard(state: LauncherState) {
 // ---------------------------------------------------------------- cassette player
 
 @Composable
-internal fun CassetteCard(state: LauncherState) {
+internal fun CassetteCard(state: LauncherState, size: Int = 2) {
+    if (size < 2) {
+        CassetteSummary(state, size)
+        return
+    }
     val context = LocalContext.current
     val np = state.nowPlaying
     var angle by remember { mutableStateOf(0f) }
